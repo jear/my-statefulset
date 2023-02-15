@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: remote-ssh
+spec:
+  selector:
+    matchLabels:
+      app: remote-ssh
+  serviceName: "remote-ssh"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: remote-ssh
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: remote-ssh
+        image: jear/my-ubuntu18:latest
+        imagePullPolicy: Always
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - /bin/bash
+              - -c
+              - exec 2>>/tmp/post.log; set -x; service ssh start; echo $JEAR_SECRET; useradd ubuntu -m -s /bin/bash; mkdir /home/ubuntu/.ssh; chown ubuntu:ubuntu /home/ubuntu/.ssh; cp /var/ssh-key-secret/ssh-publickey /home/ubuntu/.ssh/authorized_keys; chmod 600 /home/ubuntu/.ssh/authorized_keys; chown ubuntu:ubuntu /home/ubuntu/.ssh/authorized_keys;
+        ports:
+        - containerPort: 22
+        volumeMounts:
+        - name: remote-ssh-store
+          mountPath: /home
+        - name: ssh-key-secret
+          mountPath: "/var/ssh-key-secret"
+          readOnly: true
+        env:
+          - name: JEAR_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: jear-secret
+                key: JEAR_SECRET
+      volumes:
+      - name: ssh-key-secret
+        secret:
+          secretName: ssh-key-secret
+  volumeClaimTemplates:
+  - metadata:
+      name: remote-ssh-store
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: openebs-hostpath
+      resources:
+        requests:
+          storage: 10Gi
+
